@@ -29,7 +29,7 @@ questions you are most likely to be asked, with answers.
 ## 1. The project in one minute
 
 **Title:** Cloud-Based Traffic Data Analytics and Congestion Prediction (UCS531 Cloud Computing, Lab L430).
-**Team:** Harshpreet Singh, Gurliv Singh. **Advisor:** Ishani Rana.
+**Team:** Gurliv Singh, Harshpreet Singh. **Advisor:** Ishani Rana.
 
 **Problem.** Traffic data is large and depends on time and location. On one laptop it doesn't scale and nobody else
 can reach it.

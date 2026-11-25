@@ -260,8 +260,8 @@ loadtest/                Locust load test
 
 | Member | |
 |---|---|
-| Harshpreet Singh | UCS531, Lab L430 |
 | Gurliv Singh | UCS531, Lab L430 |
+| Harshpreet Singh | UCS531, Lab L430 |
 
 Faculty advisor: **Ishani Rana**.
 

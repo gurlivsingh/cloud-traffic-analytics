@@ -1,103 +1,103 @@
 1
-00:00:00,000 --> 00:00:25,040
-Hello. This video explains our U C S 5 3 1 cloud computing project: Cloud-Based Traffic Data Analytics and Congestion Prediction, made by Harshpreet Singh and Gurliv Singh, under the guidance of Ishani Rana. We will cover the problem, the cloud architecture, how the data flows, every page of the dashboard, and how the project meets each requirement of the course.
+00:00:00,000 --> 00:00:28,776
+Hello. This video explains our U C S 5 3 1 cloud computing project: Cloud-Based Traffic Data Analytics and Congestion Prediction, made by Gurliv Singh and Harshpreet Singh, under the guidance of Ishani Rana. We will cover the problem, the cloud architecture, how the data flows, every page of the dashboard, and how the project meets each requirement of the course.
 
 2
-00:00:25,740 --> 00:00:52,414
+00:00:29,476 --> 00:00:59,740
 Traffic data is large, and it depends on time and location. If it is processed on one laptop, it does not scale and nobody else can reach it. Our goal was to store historical traffic data in the cloud, analyse it in the cloud, classify how congested each road is, predict the next few hours with machine learning, and show everything on a web dashboard, with cloud security and cloud monitoring built in.
 
 3
-00:00:53,114 --> 00:01:31,537
+00:01:00,440 --> 00:01:43,952
 Cloud computing means renting computing resources on demand over the internet, paying only for what you use, and scaling up or down when needed. Our project uses three service styles. Amazon E C 2 is infrastructure as a service: a virtual server that we fully control. Amazon R D S is a managed database, closer to platform as a service: A W S runs and patches Postgres for us. Amazon S 3 is object storage. Around them, I A M, S S M Parameter Store, CloudWatch and S N S handle security and monitoring.
 
 4
-00:01:32,237 --> 00:02:19,304
+00:01:44,652 --> 00:02:39,900
 Here is the architecture. A user's browser talks to one E C 2 server. On that server, nginx receives web traffic and passes it to gunicorn, which runs our Flask application. The same server runs the data pipeline on a schedule. Raw files, processed files and trained models live in an S 3 bucket. Structured traffic records and predictions live in an R D S Postgres database, which is not reachable from the internet; only the E C 2 security group can connect to it. The server has no passwords on disk: it uses an I A M role, and reads its secrets from S S M Parameter Store. CloudWatch collects metrics and logs, and alarms send emails through S N S.
 
 5
-00:02:20,004 --> 00:02:57,997
+00:02:40,600 --> 00:03:23,896
 The data pipeline has five steps. First, prepare data downloads the public dataset and uploads it to S 3. Second, E T L reads each new file from S 3, cleans it, computes congestion, saves a processed copy back to S 3, and loads the rows into R D S. Third, training compares three models and saves the best one to S 3. Fourth, prediction loads that model and writes forecasts into R D S. Fifth, the dashboard reads R D S and shows the results. Cron runs this every hour, and retrains every night.
 
 6
-00:02:58,697 --> 00:03:34,030
+00:03:24,596 --> 00:04:04,028
 Our real data is the U C I Metro Interstate Traffic Volume dataset: hourly traffic counts on the I 94 highway in Minneapolis, from 2012 to 2018, with weather and public holidays. Because it has only one station, we generate six extra road segments from the real pattern, and we label them synthetic everywhere. The cleaning step removes duplicate hours, fixes impossible temperature and rainfall values, converts Kelvin to Celsius, and marks the whole day of a holiday instead of only its midnight row.
 
 7
-00:03:34,730 --> 00:04:05,094
+00:04:04,728 --> 00:04:39,600
 Congestion is measured with the volume to capacity ratio, a standard traffic engineering measure. Volume is vehicles per hour. Capacity is not in the data, so we estimate it as the ninety fifth percentile of each road's hourly volume. A ratio below 0.4 is Low, below 0.7 is Moderate, below 0.9 is High, and anything above is Severe. On the dashboard, each level always has both a colour and a written label.
 
 8
-00:04:05,794 --> 00:04:31,324
+00:04:40,300 --> 00:05:10,612
 This is the Overview page, the home of the dashboard. The headline explains what the system does. The featured card shows four live numbers: the latest data hour, the number of traffic records stored in the database, the accuracy of the active model, and how many roads are at High or Severe congestion right now. Here it is Monday at 8 in the morning, rush hour, and all seven roads are congested.
 
 9
-00:04:32,024 --> 00:04:47,486
+00:05:11,312 --> 00:05:28,472
 Table one lists every road. For each road you see the current volume, the volume to capacity ratio, the congestion level now, and the model's prediction for the next hour with its level. Clicking a road name opens its forecast.
 
 10
-00:04:48,186 --> 00:05:06,702
+00:05:29,172 --> 00:05:49,932
 Figure one compares actual traffic, the solid line, with the model's predictions, the dashed line, over the last 48 hours, and then continues into the forecast. The dotted line marks where High congestion starts. You can switch the road with the location selector.
 
 11
-00:05:07,402 --> 00:05:27,883
+00:05:50,632 --> 00:06:14,008
 The Historical page analyses past data. At the top you choose a road, a date range, and hourly or daily resolution. Figure one shows traffic volume over time; you can clearly see the morning and evening peaks of every weekday. For synthetic roads, a separate figure shows average speed.
 
 12
-00:05:28,583 --> 00:05:48,484
+00:06:14,708 --> 00:06:37,964
 The heatmap shows average traffic for every hour of every weekday; darker cells mean more traffic, so the weekday rush hours stand out. Figure four compares weekdays with weekends: weekdays have two sharp peaks, weekends one gentle hump. Figure five shows how weather changes daytime traffic.
 
 13
-00:05:49,184 --> 00:05:59,666
+00:06:38,664 --> 00:06:51,528
 Figure six shows that public holidays carry far fewer vehicles per day than normal days. Figure seven shows how many hours the road spent at each congestion level.
 
 14
-00:06:00,366 --> 00:06:15,853
+00:06:52,228 --> 00:07:10,132
 The Prediction page focuses on the future. The chart shows the last 48 hours of actual traffic, the model's predictions, and the forecast for the next six hours, with the Moderate, High and Severe thresholds drawn as labelled lines.
 
 15
-00:06:16,553 --> 00:06:34,469
+00:07:10,832 --> 00:07:32,216
 The forecast table lists each future hour with its predicted volume, ratio and congestion level. The first hour is predicted directly. Later hours feed each prediction back in as the next input, so the error grows with the horizon, and we state that honestly on the page.
 
 16
-00:06:35,169 --> 00:06:51,991
+00:07:32,916 --> 00:07:51,468
 The Map page places every road on an OpenStreetMap map. Each circle is shaded by its congestion level and sized by its ratio. Clicking a circle shows the volume, speed, occupancy, the current level, and the next hour forecast.
 
 17
-00:06:52,691 --> 00:07:25,648
+00:07:52,168 --> 00:08:30,424
 The Model page proves the machine learning works. We compare three models on the last fifteen percent of the timeline, data the models never saw during training: a naive baseline that copies last week's value, Linear Regression, and Random Forest. Random Forest wins, with an R squared of 0.966 and a mean absolute error of 218 vehicles per hour. It lowers the root mean squared error by 38 percent against the baseline. The best model automatically becomes active.
 
 18
-00:07:26,348 --> 00:07:48,658
+00:08:31,124 --> 00:08:56,036
 Figure one shows which inputs the Random Forest relies on most: the traffic at the same hour last week, and the traffic one hour ago. Figure two plots predicted against actual values; points close to the diagonal line are good predictions. Table two is the training history stored in the database, with the S 3 location of each saved model.
 
 19
-00:07:49,358 --> 00:08:17,038
+00:08:56,736 --> 00:09:29,016
 The System page shows the cloud infrastructure itself. It checks the health of the database and the object storage. When the app runs on E C 2, it shows live CloudWatch charts for server CPU and memory, database CPU and connections, and rows loaded. Below is the log of every pipeline run, read from the database. Right now we are in local mode, so the CloudWatch charts are replaced by a note.
 
 20
-00:08:17,738 --> 00:08:43,073
+00:09:29,716 --> 00:09:59,572
 The Admin page needs a password, which on A W S is stored as a hash in S S M. Step one uploads a new traffic C S V to S 3; the file is validated before it is accepted. Step two runs the pipeline on the server. The live demo button streams the next held back hour of data through S 3, E T L, the database and prediction, as if a road sensor had just reported.
 
 21
-00:08:43,773 --> 00:09:16,152
+00:10:00,272 --> 00:10:39,320
 Security is built into every layer. The server has no stored credentials; it uses an I A M role with least privilege. Secrets are encrypted in S S M Parameter Store. The database is not public and accepts connections only from the web server's security group. The S 3 bucket blocks all public access and is encrypted. In the app, admin pages need a login, uploads are size limited and validated, cookies are protected, and every database query is parameterised.
 
 22
-00:09:16,852 --> 00:09:44,467
+00:10:40,020 --> 00:11:11,436
 For monitoring, the CloudWatch agent sends the server's CPU, memory and disk usage, and ships the application, pipeline and nginx logs. Our pipeline publishes its own metrics, such as rows loaded and run time. Three alarms watch for high CPU, low database storage and failed pipeline runs, and send email through S N S. A CloudWatch dashboard shows all of this in one place.
 
 23
-00:09:45,167 --> 00:10:21,720
+00:11:12,136 --> 00:11:53,080
 Deployment is automated with CloudFormation, which is infrastructure as code. One command, python deploy slash aws dot py up, creates the server, database, bucket, security groups, logs, alarms and dashboard. The server then installs itself from our GitHub repository and loads the data. It is designed for our A W S Academy Learner Lab. An honest note: at the time of this video, the A W S deployment has not been run yet. Everything you saw was running locally with the same code.
 
 24
-00:10:22,420 --> 00:10:44,361
+00:11:53,780 --> 00:12:20,036
 Quality is checked automatically. Fourteen tests cover the congestion thresholds, data leakage in the features, every cleaning rule, a full end to end run from storage to the A P I, and the admin security. GitHub Actions runs them on every push. Every teacher requirement is tracked in the requirements document with its evidence.
 
 25
-00:10:45,061 --> 00:11:08,177
+00:12:20,736 --> 00:12:47,400
 Here is how the project meets the course brief. The proposal is submitted. The architecture diagram is in the README. The working implementation is verified on the real dataset. The source code and README are on GitHub. Still to do: the live A W S deployment, the five page report, and the final presentation.
 
 26
-00:11:08,877 --> 00:11:28,178
+00:12:48,100 --> 00:13:09,652
 To summarise: the project stores traffic data in S 3 and R D S, processes and predicts it on E C 2, secures it with I A M, security groups and S S M, and monitors it with CloudWatch and S N S, and it is built to deploy with one command. Thank you for watching.
