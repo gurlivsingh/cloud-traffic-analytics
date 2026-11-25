@@ -1,0 +1,111 @@
+{% extends "base.html" %}
+{% block title %}Historical{% endblock %}
+{% block content %}
+<div class="hero">
+  <div>
+    <p class="eyebrow">Historical analysis</p>
+    <h1>When, where and why traffic builds up.</h1>
+  </div>
+  <p class="lede">Patterns in the stored records for one location: daily rhythm, weekday against weekend, and the
+    effect of weather and public holidays. Choose a location and date range below.</p>
+</div>
+
+<div class="controls">
+  <label class="field">Location <select id="loc"></select></label>
+  <label class="field">From <input type="date" id="from"></label>
+  <label class="field">To <input type="date" id="to"></label>
+  <label class="field">Resolution <select id="agg"><option value="hour">Hourly</option><option value="day">Daily</option></select></label>
+  <button id="apply">Apply</button>
+</div>
+
+<section class="grid">
+  <div class="card span-all">
+    <p class="fig">Figure 1</p><h2 id="series-title">Traffic volume</h2>
+    <div class="chartbox"><canvas id="c-volume"></canvas></div>
+  </div>
+  <div class="card span-all" id="speed-card" hidden>
+    <p class="fig">Figure 2</p><h2>Average speed (km/h)</h2>
+    <div class="chartbox short"><canvas id="c-speed"></canvas></div>
+  </div>
+  <div class="card span-all">
+    <p class="fig">Figure 3</p><h2>Average volume by hour of day and day of week</h2>
+    <div class="tablewrap"><table class="heat" id="heat"></table></div>
+    <p class="note">Values in thousands of vehicles per hour; darker cells carry more traffic. Hover a cell for the exact value.</p>
+  </div>
+  <div class="card">
+    <p class="fig">Figure 4</p><h2>Weekday vs weekend, by hour</h2>
+    <div class="chartbox"><canvas id="c-daytype"></canvas></div>
+  </div>
+  <div class="card">
+    <p class="fig">Figure 5</p><h2>Average volume by weather, 07:00–19:00</h2>
+    <div class="chartbox"><canvas id="c-weather"></canvas></div>
+  </div>
+  <div class="card">
+    <p class="fig">Figure 6</p><h2>Vehicles per day: normal days vs public holidays</h2>
+    <div class="chartbox"><canvas id="c-holiday"></canvas></div>
+  </div>
+  <div class="card">
+    <p class="fig">Figure 7</p><h2>Hours spent at each congestion level</h2>
+    <div class="chartbox"><canvas id="c-levels"></canvas></div>
+  </div>
+</section>
+{% endblock %}
+{% block scripts %}
+<script>
+const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+const HOURS = [...Array(24).keys()].map(h => String(h).padStart(2, '0') + ':00');
+const noLegend = {plugins: {legend: {display: false}}};
+let loc;
+
+async function drawSeries() {
+  const q = new URLSearchParams({location: loc, agg: document.getElementById('agg').value});
+  const f = document.getElementById('from').value, t = document.getElementById('to').value;
+  if (f) q.set('from', f); if (t) q.set('to', t + ' 23:59');
+  const d = await getJSON('/api/traffic?' + q);
+  document.getElementById('series-title').textContent = `Traffic volume, ${d.agg === 'day' ? 'daily average' : 'hourly'} (vehicles per hour)`;
+  const xs = {x: {ticks: {maxTicksLimit: 10}, grid: {display: false}}};
+  chart('c-volume', {type: 'line', data: {labels: d.t, datasets: [{label: 'Volume', data: d.volume,
+    borderColor: SERIES.primary, backgroundColor: SERIES.primary, borderWidth: 1.5}]},
+    options: {...noLegend, interaction: {mode: 'index', intersect: false}, scales: {...xs, y: {beginAtZero: true}}}});
+  const hasSpeed = d.speed.some(v => v !== null);          // one measure per chart: no dual axes
+  document.getElementById('speed-card').hidden = !hasSpeed;
+  if (hasSpeed) chart('c-speed', {type: 'line', data: {labels: d.t, datasets: [{label: 'Speed', data: d.speed,
+    borderColor: SERIES.primary, backgroundColor: SERIES.primary, borderWidth: 1.5}]},
+    options: {...noLegend, interaction: {mode: 'index', intersect: false}, scales: {...xs, y: {beginAtZero: true}}}});
+  if (!document.getElementById('from').value && d.t.length) {
+    document.getElementById('from').value = d.t[0].slice(0, 10);
+    document.getElementById('to').value = d.t[d.t.length - 1].slice(0, 10);
+  }
+}
+
+async function drawPatterns() {
+  const p = await getJSON('/api/patterns?location=' + loc);
+  const max = Math.max(...p.heatmap.flat().filter(v => v !== null));
+  document.getElementById('heat').innerHTML =
+    '<tr><th></th>' + HOURS.map(h => `<th>${h.slice(0, 2)}</th>`).join('') + '</tr>' +
+    p.heatmap.map((row, i) => `<tr><th>${DAYS[i]}</th>` + row.map((v, h) => {
+      const a = v === null ? 0 : v / max;                    // one hue, light -> dark
+      return `<td style="background:rgba(110,55,0,${(0.06 + a * 0.86).toFixed(2)});color:${a > 0.55 ? CARD : '#141413'}"
+        title="${DAYS[i]} ${HOURS[h]}: ${fmtInt(v)} veh/h">${v === null ? '' : (v / 1000).toFixed(1)}</td>`;
+    }).join('') + '</tr>').join('');
+  chart('c-daytype', {type: 'line', data: {labels: HOURS, datasets: Object.entries(p.hourly).map(([k, v], i) =>
+    ({label: k, data: v, borderColor: i ? SERIES.secondary : SERIES.primary, backgroundColor: i ? SERIES.secondary : SERIES.primary,
+      borderDash: i ? [6, 4] : []}))},
+    options: {interaction: {mode: 'index', intersect: false}, plugins: {legend: {align: 'start'}},
+      scales: {x: {ticks: {maxTicksLimit: 8}, grid: {display: false}}, y: {beginAtZero: true}}}});
+  const bar = (id, labels, values, colors) => chart(id, {type: 'bar',
+    data: {labels, datasets: [{data: values, backgroundColor: colors || SERIES.primary, maxBarThickness: 48}]},
+    options: {...noLegend, scales: {x: {grid: {display: false}}, y: {beginAtZero: true}}}});
+  bar('c-weather', p.weather.labels, p.weather.values);
+  bar('c-holiday', Object.keys(p.holiday), Object.values(p.holiday));
+  bar('c-levels', LEVELS, LEVELS.map(l => p.levels[l]), LEVELS.map(l => LEVEL_COLORS[l]));
+}
+
+locationSelect(document.getElementById('loc'), id => {
+  loc = id;
+  document.getElementById('from').value = document.getElementById('to').value = '';
+  drawSeries().catch(showError); drawPatterns().catch(showError);
+}).catch(showError);
+document.getElementById('apply').onclick = () => drawSeries().catch(showError);
+</script>
+{% endblock %}

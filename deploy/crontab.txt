@@ -1,0 +1,5 @@
+# Installed for ec2-user by setup_ec2.sh  (crontab -l -u ec2-user to view)
+# Every hour: process new raw/ files + refresh predictions
+5 * * * * cd /opt/traffic && .venv/bin/python -m pipeline.run_all --no-train >> /var/log/traffic/pipeline.log 2>&1
+# Every night 02:30: same + retrain the models
+30 2 * * * cd /opt/traffic && .venv/bin/python -m pipeline.run_all >> /var/log/traffic/pipeline.log 2>&1

@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block title %}Map{% endblock %}
+{% block head %}
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+{% endblock %}
+{% block content %}
+<div class="hero">
+  <div>
+    <p class="eyebrow">Congestion map</p>
+    <h1>The network at a glance.</h1>
+  </div>
+  <p class="lede">Each circle is a monitored road, shaded by its current congestion level and sized by its
+    volume-to-capacity ratio. Select a circle for speed, occupancy and the next-hour forecast.</p>
+</div>
+<section>
+  <div class="card">
+    <div class="legend" id="legend"></div>
+    <div id="map" role="region" aria-label="Map of monitored roads"></div>
+  </div>
+</section>
+{% endblock %}
+{% block scripts %}
+<script>
+document.getElementById('legend').innerHTML = levelLegend();
+const map = L.map('map', {scrollWheelZoom: false});
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+  {maxZoom: 18, attribution: '&copy; OpenStreetMap contributors'}).addTo(map);
+getJSON('/api/locations').then(locs => {
+  const pts = locs.filter(l => l.lat !== null && l.lon !== null);
+  pts.forEach(l => L.circleMarker([l.lat, l.lon], {radius: 9 + 10 * Math.min(l.vc ?? 0, 1.2),
+      color: INK, weight: 1.5, fillColor: LEVEL_COLORS[l.level], fillOpacity: 0.9})
+    .addTo(map).bindPopup(`<b>${esc(l.name)}</b><br>${esc(l.ts)}
+      <br>Volume ${fmtInt(l.volume)} veh/h · V/C ${l.vc}
+      ${l.speed !== null ? `<br>Speed ${l.speed} km/h · Occupancy ${l.occupancy}%` : ''}
+      <br>Now: ${level(l.level)}
+      ${l.next ? `<br>Next hour: ${level(l.next.level)} (${fmtInt(l.next.volume)} veh/h)` : ''}
+      <br><a href="/prediction?location=${l.id}">Open forecast</a>`));
+  if (pts.length) map.fitBounds(pts.map(l => [l.lat, l.lon]), {padding: [40, 40]});
+  else map.setView([20, 0], 2);
+}).catch(showError);
+</script>
+{% endblock %}

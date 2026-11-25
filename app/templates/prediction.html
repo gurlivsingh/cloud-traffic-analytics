@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% block title %}Prediction{% endblock %}
+{% block content %}
+<div class="hero">
+  <div>
+    <p class="eyebrow">Congestion prediction</p>
+    <h1>The next six hours, one road at a time.</h1>
+  </div>
+  <p class="lede">The active model predicts hourly volume, which is converted to a congestion level using the
+    volume-to-capacity ratio: below 0.4 is <strong>Low</strong>, below 0.7 <strong>Moderate</strong>, below 0.9
+    <strong>High</strong>, and above that <strong>Severe</strong>.</p>
+</div>
+
+<div class="controls"><label class="field">Location <select id="loc"></select></label></div>
+
+<section class="grid">
+  <div class="card span-all">
+    <p class="fig">Figure 1</p>
+    <h2>Actual vs predicted volume, with congestion thresholds</h2>
+    <div class="chartbox"><canvas id="c-pred"></canvas></div>
+  </div>
+  <div class="card span-all">
+    <p class="fig">Table 1</p>
+    <h2>Forecast</h2>
+    <div class="legend" id="legend"></div>
+    <div class="tablewrap"><table>
+      <thead><tr><th>Hour</th><th class="num">Predicted volume (veh/h)</th><th class="num">V/C ratio</th><th>Level</th></tr></thead>
+      <tbody id="rows"></tbody>
+    </table></div>
+    <p class="note">Hours after the first are predicted by feeding each prediction back in as the next input, so the
+      error grows with the horizon. Future weather is assumed to stay as last observed.</p>
+  </div>
+</section>
+{% endblock %}
+{% block scripts %}
+<script>
+async function draw(loc) {
+  const d = await getJSON('/api/predictions?location=' + loc);
+  const labels = [...new Set([...d.actual.map(p => p.t), ...d.predicted.map(p => p.t)])].sort();
+  const map = arr => { const m = Object.fromEntries(arr.map(p => [p.t, p.v])); return labels.map(t => m[t] ?? null); };
+  const short = labels.map(t => t.slice(5));
+  chart('c-pred', {type: 'line', data: {labels: short, datasets: [
+    {label: 'Actual', data: map(d.actual), borderColor: SERIES.primary, backgroundColor: SERIES.primary},
+    {label: 'Predicted', data: map(d.predicted), borderColor: SERIES.secondary, backgroundColor: SERIES.secondary, borderDash: [6, 4]},
+    thresholdLine(short, Math.round(d.capacity * 0.4), 'Moderate'),
+    thresholdLine(short, Math.round(d.capacity * 0.7), 'High'),
+    thresholdLine(short, Math.round(d.capacity * 0.9), 'Severe'),
+  ]}, options: {interaction: {mode: 'index', intersect: false}, plugins: {legend: {align: 'start'}},
+    scales: {x: {ticks: {maxTicksLimit: 10}, grid: {display: false}},
+             y: {beginAtZero: true, title: {display: true, text: 'vehicles per hour'}}}}});
+  document.getElementById('rows').innerHTML = d.future.map(f => `<tr><td>${esc(f.t)}</td>
+    <td class="num">${fmtInt(f.v)}</td><td class="num">${(f.v / d.capacity).toFixed(2)}</td><td>${level(f.level)}</td></tr>`).join('')
+    || '<tr><td colspan="4">No forecast yet. Run the pipeline from the Admin page.</td></tr>';
+}
+document.getElementById('legend').innerHTML = levelLegend();
+locationSelect(document.getElementById('loc'), id => draw(id).catch(showError)).catch(showError);
+</script>
+{% endblock %}

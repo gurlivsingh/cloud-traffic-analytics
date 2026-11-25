@@ -1,0 +1,11 @@
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.env
+local.db
+storage/
+pipeline.log
+*.joblib
+.claude/
+*.pdf

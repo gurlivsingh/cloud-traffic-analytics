@@ -1,0 +1,15 @@
+[Unit]
+Description=Cloud Traffic Analytics web app (gunicorn + Flask)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=ec2-user
+WorkingDirectory=/opt/traffic
+ExecStart=/opt/traffic/.venv/bin/gunicorn --workers 2 --bind 127.0.0.1:8000 --timeout 120 \
+  --access-logfile /var/log/traffic/access.log --error-logfile /var/log/traffic/app.log app.app:app
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

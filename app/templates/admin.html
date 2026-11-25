@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block title %}Admin{% endblock %}
+{% block content %}
+<div class="hero">
+  <div>
+    <p class="eyebrow">Admin · <a href="{{ url_for('logout') }}">Log out</a></p>
+    <h1>Feed the pipeline.</h1>
+  </div>
+  <p class="lede">Upload new traffic data to Amazon S3, then run the pipeline on EC2: it loads every new file into
+    RDS, optionally retrains the models, and refreshes all forecasts.</p>
+</div>
+
+<section class="grid three">
+  <div class="card">
+    <p class="fig">Step 1</p>
+    <h2>Upload a traffic CSV</h2>
+    <form method="post" action="{{ url_for('admin_upload') }}" enctype="multipart/form-data">
+      <p><input type="file" name="file" accept=".csv,.gz" required aria-label="CSV file"></p>
+      <button>Upload to S3</button>
+    </form>
+    <p class="note">Up to {{ max_mb }} MB. Either the UCI file as downloaded (<code>date_time, traffic_volume, …</code>)
+      or <code>location, ts, volume</code> with optional <code>lat, lon, speed, occupancy, temp, rain, snow, clouds,
+      weather_main, is_holiday</code>. Files are checked before they reach storage.</p>
+  </div>
+  <div class="card">
+    <p class="fig">Step 2</p>
+    <h2>Run the pipeline</h2>
+    <form method="post" action="{{ url_for('admin_run') }}">
+      <p><label class="check"><input type="checkbox" name="train" value="1"> Retrain the models too (about a minute)</label></p>
+      <button class="btn-clay">Run pipeline</button>
+    </form>
+    <p class="note">Runs in the background. Progress appears on the <a href="{{ url_for('system') }}">System</a> page.</p>
+  </div>
+  <div class="card">
+    <p class="fig">Live demo</p>
+    <h2>Stream the next hour</h2>
+    <form method="post" action="{{ url_for('admin_replay') }}"><button>Stream next hour</button></form>
+    <p class="note">Sends the next held-back hour from <code>feed/</code> through S3, ETL, RDS and prediction, as if a
+      sensor had just reported. The Overview updates a few seconds later.</p>
+  </div>
+</section>
+{% endblock %}

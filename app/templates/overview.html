@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+{% block title %}Overview{% endblock %}
+{% block content %}
+<div class="hero">
+  <div>
+    <p class="eyebrow">Overview</p>
+    <h1>Traffic congestion, measured and forecast.</h1>
+  </div>
+  <p class="lede">Hourly traffic records are stored in Amazon S3 and RDS, processed on EC2, and forecast one to six
+    hours ahead by the active machine-learning model. Congestion is the volume-to-capacity ratio of each road.
+    <span class="meta" id="clock">Loading the latest data…</span></p>
+</div>
+
+<section>
+  <div class="card feature">
+    <div class="stats">
+      <div class="stat"><div class="label">Latest data hour</div><div class="value" id="k-latest">–</div></div>
+      <div class="stat"><div class="label">Records in RDS</div><div class="value" id="k-records">–</div></div>
+      <div class="stat"><div class="label">Model accuracy (R²)</div><div class="value" id="k-model">–</div></div>
+      <div class="stat"><div class="label">Locations at High or Severe</div><div class="value" id="k-congested">–</div></div>
+    </div>
+  </div>
+</section>
+
+<section class="grid">
+  <div class="card span-all">
+    <p class="fig">Table 1</p>
+    <h2>Every location, right now and one hour ahead</h2>
+    <div class="tablewrap"><table>
+      <thead><tr><th>Location</th><th class="num">Volume (veh/h)</th><th class="num">V/C ratio</th><th>Level now</th><th class="num">Next hour</th><th>Level next hour</th></tr></thead>
+      <tbody id="loc-rows"><tr><td colspan="6">Loading…</td></tr></tbody>
+    </table></div>
+  </div>
+  <div class="card span-all">
+    <p class="fig">Figure 1</p>
+    <h2>Actual vs predicted volume: last 48 hours and the forecast</h2>
+    <div class="controls"><label class="field">Location <select id="loc"></select></label></div>
+    <div class="chartbox"><canvas id="c-pred" aria-label="Actual and predicted traffic volume"></canvas></div>
+  </div>
+</section>
+{% endblock %}
+{% block scripts %}
+<script>
+(async () => {
+  try {
+    const s = await getJSON('/api/summary');
+    document.getElementById('k-latest').innerHTML = s.latest
+      ? `${esc(s.latest.slice(11))} <small>${esc(s.latest.slice(0, 10))}</small>` : '–';
+    document.getElementById('k-records').textContent = fmtInt(s.records);
+    document.getElementById('k-model').innerHTML = s.model
+      ? `${s.model.r2.toFixed(3)} <small>${esc(s.model.name)}</small>` : 'not trained';
+    document.getElementById('clock').textContent = s.latest
+      ? `Data is historical (2012–2018). "Now" is ${s.latest}, the latest hour in the database.` : '';
+
+    const locs = await locationSelect(document.getElementById('loc'), drawPred);
+    const busy = locs.filter(l => l.level === 'High' || l.level === 'Severe').length;
+    document.getElementById('k-congested').innerHTML = `${busy} <small>of ${locs.length}</small>`;
+    document.getElementById('loc-rows').innerHTML = locs.map(l => `<tr>
+      <td><a href="/prediction?location=${l.id}">${esc(l.name)}</a></td>
+      <td class="num">${fmtInt(l.volume)}</td><td class="num">${l.vc ?? '–'}</td><td>${level(l.level)}</td>
+      <td class="num">${l.next ? fmtInt(l.next.volume) : '–'}</td><td>${l.next ? level(l.next.level) : '–'}</td>
+    </tr>`).join('');
+  } catch (e) { showError(e); }
+})();
+
+async function drawPred(loc) {
+  const d = await getJSON('/api/predictions?location=' + loc);
+  const labels = [...new Set([...d.actual.map(p => p.t), ...d.predicted.map(p => p.t)])].sort();
+  const map = arr => { const m = Object.fromEntries(arr.map(p => [p.t, p.v])); return labels.map(t => m[t] ?? null); };
+  const short = labels.map(t => t.slice(5));
+  chart('c-pred', {type: 'line', data: {labels: short, datasets: [
+    {label: 'Actual', data: map(d.actual), borderColor: SERIES.primary, backgroundColor: SERIES.primary},
+    {label: 'Predicted', data: map(d.predicted), borderColor: SERIES.secondary, backgroundColor: SERIES.secondary, borderDash: [6, 4]},
+    thresholdLine(short, Math.round(d.capacity * 0.7), 'High congestion from here'),
+  ]}, options: {interaction: {mode: 'index', intersect: false}, plugins: {legend: {align: 'start'}},
+    scales: {x: {ticks: {maxTicksLimit: 10}, grid: {display: false}},
+             y: {beginAtZero: true, title: {display: true, text: 'vehicles per hour'}}}}});
+}
+</script>
+{% endblock %}

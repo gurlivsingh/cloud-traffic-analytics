@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+{% block title %}Model{% endblock %}
+{% block content %}
+<div class="hero">
+  <div>
+    <p class="eyebrow">Model performance</p>
+    <h1>How well the forecast holds up.</h1>
+  </div>
+  <p class="lede" id="periods">Loading the latest training run…</p>
+</div>
+
+<section class="grid">
+  <div class="card feature span-all">
+    <p class="fig">Table 1 · Test set, never seen in training</p>
+    <h2>Baseline vs Linear Regression vs Random Forest</h2>
+    <div class="tablewrap"><table>
+      <thead><tr><th>Model</th><th class="num">MAE (veh/h)</th><th class="num">RMSE (veh/h)</th><th class="num">R²</th><th class="num">Congestion level correct</th></tr></thead>
+      <tbody id="results"></tbody>
+    </table></div>
+    <p class="note">Time-based split: the test set is the last 15% of the timeline, so the model is always judged on
+      hours that come after everything it learned from. The model with the lowest RMSE becomes active.</p>
+  </div>
+  <div class="card">
+    <p class="fig">Figure 1</p><h2>What the Random Forest relies on</h2>
+    <div class="chartbox"><canvas id="c-imp"></canvas></div>
+  </div>
+  <div class="card">
+    <p class="fig">Figure 2</p><h2 id="scatter-title">Predicted vs actual</h2>
+    <div class="chartbox"><canvas id="c-scatter"></canvas></div>
+  </div>
+  <div class="card span-all">
+    <p class="fig">Table 2</p><h2>Training history (model_runs table in RDS)</h2>
+    <div class="tablewrap"><table>
+      <thead><tr><th>Run</th><th>Trained</th><th>Model</th><th class="num">RMSE</th><th class="num">R²</th><th>Status</th><th>Saved to</th></tr></thead>
+      <tbody id="runs"></tbody>
+    </table></div>
+  </div>
+</section>
+{% endblock %}
+{% block scripts %}
+<script>
+getJSON('/api/model').then(({metrics: m, runs}) => {
+  if (!m) { document.getElementById('periods').textContent = 'No model trained yet. Run the pipeline from the Admin page.'; return; }
+  document.getElementById('periods').innerHTML =
+    `Trained on <strong>${fmtInt(m.train_rows)}</strong> hours (${esc(m.train_period[0].slice(0, 10))} to ${esc(m.train_period[1].slice(0, 10))})
+     and tested on <strong>${fmtInt(m.test_rows)}</strong> later hours it had never seen
+     (${esc(m.test_period[0].slice(0, 10))} to ${esc(m.test_period[1].slice(0, 10))}). Active model: <strong>${esc(m.best_model)}</strong>.`;
+  document.getElementById('results').innerHTML = m.results.map(r => `<tr class="${r.model === m.best_model ? 'best' : ''}">
+    <td>${esc(r.model)}${r.model === m.best_model ? ' · active' : ''}</td><td class="num">${r.mae.toFixed(1)}</td>
+    <td class="num">${r.rmse.toFixed(1)}</td><td class="num">${r.r2.toFixed(3)}</td>
+    <td class="num">${(r.level_accuracy * 100).toFixed(1)}%</td></tr>`).join('');
+  chart('c-imp', {type: 'bar', data: {labels: m.feature_importance.map(f => f.feature),
+    datasets: [{label: 'Importance', data: m.feature_importance.map(f => f.importance), backgroundColor: SERIES.primary, maxBarThickness: 16}]},
+    options: {indexAxis: 'y', plugins: {legend: {display: false}}, scales: {y: {grid: {display: false}}}}});
+  document.getElementById('scatter-title').textContent = `Predicted vs actual, ${m.scatter.length} test hours`;
+  const max = Math.max(...m.scatter.map(p => Math.max(p.actual, p.predicted)));
+  chart('c-scatter', {type: 'scatter', data: {datasets: [
+    {label: m.best_model, data: m.scatter.map(p => ({x: p.actual, y: p.predicted})), backgroundColor: SERIES.primary + '99',
+     borderColor: CARD, borderWidth: 1, pointRadius: 4},
+    {label: 'Perfect prediction', type: 'line', data: [{x: 0, y: 0}, {x: max, y: max}], borderColor: INK, borderWidth: 1, borderDash: [4, 4]}]},
+    options: {plugins: {legend: {align: 'start'}}, scales: {x: {beginAtZero: true, title: {display: true, text: 'actual veh/h'}},
+      y: {beginAtZero: true, title: {display: true, text: 'predicted veh/h'}}}}});
+  document.getElementById('runs').innerHTML = runs.map(r => `<tr><td>${r.id}</td><td>${esc(r.trained_at)}</td>
+    <td>${esc(r.model_name)}</td><td class="num">${r.rmse}</td><td class="num">${r.r2}</td>
+    <td>${r.is_active ? '<strong>Active</strong>' : ''}</td><td><code>${esc(r.s3_key || '')}</code></td></tr>`).join('');
+}).catch(showError);
+</script>
+{% endblock %}

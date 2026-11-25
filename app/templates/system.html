@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% block title %}System{% endblock %}
+{% block content %}
+<div class="hero">
+  <div>
+    <p class="eyebrow">System &amp; cloud resources</p>
+    <h1>The infrastructure behind the forecast.</h1>
+  </div>
+  <p class="lede">Health of the database and object storage, live metrics from Amazon CloudWatch, and every run of
+    the data pipeline. This page refreshes every 60 seconds.</p>
+</div>
+
+<section class="grid" id="health"></section>
+<section class="grid" id="cw"></section>
+<section>
+  <div class="card">
+    <p class="fig">Table 1</p><h2>Pipeline runs (pipeline_runs table in RDS)</h2>
+    <div class="tablewrap"><table>
+      <thead><tr><th>Run</th><th>File (S3 key)</th><th>Started</th><th>Finished</th><th class="num">Rows in</th><th class="num">New rows</th><th>Status</th></tr></thead>
+      <tbody id="runs"></tbody>
+    </table></div>
+  </div>
+</section>
+{% endblock %}
+{% block scripts %}
+<script>
+async function refresh() {
+  const h = await fetch('/health').then(r => r.json());
+  document.getElementById('health').innerHTML = [
+    ['Database', h.db, h.db_backend], ['Object storage', h.storage, h.storage_backend]]
+    .map(([k, ok, where]) => `<div class="card"><p class="fig">${k}</p>
+      <h2 style="margin:0">${ok === 'ok' ? 'Healthy' : 'Unreachable'} <span class="note">· ${esc(where)}</span></h2></div>`).join('');
+
+  const s = await getJSON('/api/system');
+  const cw = document.getElementById('cw');
+  if (!s.cloudwatch.available) {
+    cw.innerHTML = `<div class="card panel span-all"><p class="fig">Amazon CloudWatch</p>
+      <h2>Metrics appear here when the app runs on EC2.</h2>
+      <p class="note" style="margin:0">Set <code>EC2_INSTANCE_ID</code> and <code>RDS_INSTANCE_ID</code> in <code>.env</code>
+      (the setup script fills in the first).${s.cloudwatch.error ? '<br>Error: ' + esc(s.cloudwatch.error) : ''}</p></div>`;
+  } else {
+    cw.innerHTML = s.cloudwatch.series.map((m, i) =>
+      `<div class="card"><p class="fig">CloudWatch</p><h2>${esc(m.label)}</h2><div class="chartbox short"><canvas id="cw${i}"></canvas></div></div>`).join('');
+    s.cloudwatch.series.forEach((m, i) => chart('cw' + i, {type: 'line',
+      data: {labels: m.t, datasets: [{label: m.label, data: m.v, borderColor: SERIES.primary, backgroundColor: SERIES.primary}]},
+      options: {plugins: {legend: {display: false}}, interaction: {mode: 'index', intersect: false},
+        scales: {x: {ticks: {maxTicksLimit: 6}, grid: {display: false}}, y: {beginAtZero: true}}}}));
+  }
+  document.getElementById('runs').innerHTML = s.runs.map(r => `<tr><td>${r.id}</td><td><code>${esc(r.s3_key)}</code></td>
+    <td>${esc(r.started_at)}</td><td>${esc(r.finished_at || '')}</td><td class="num">${fmtInt(r.rows_in)}</td>
+    <td class="num">${fmtInt(r.rows_loaded)}</td>
+    <td>${r.status === 'failed' ? `<strong title="${esc(r.error)}">Failed</strong>` : r.status === 'ok' ? 'Succeeded' : esc(r.status)}</td></tr>`).join('')
+    || '<tr><td colspan="7">No runs yet.</td></tr>';
+}
+refresh().catch(showError);
+setInterval(() => refresh().catch(() => {}), 60000);
+</script>
+{% endblock %}

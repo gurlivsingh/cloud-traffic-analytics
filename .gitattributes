@@ -1,0 +1,3 @@
+# Keep LF everywhere so the deploy scripts run on Linux even when edited on Windows.
+* text=auto eol=lf
+*.png binary
