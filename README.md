@@ -11,6 +11,10 @@ web dashboard run on **Amazon EC2**. **IAM**, security groups and **SSM Paramete
 
 *UCS531 Cloud Computing semester project · Lab L430 · Faculty advisor: Ishani Rana*
 
+**New to the project?** Read the full [project guide](docs/PROJECT_GUIDE.md), which covers cloud concepts, how
+every requirement is met, the technical details and viva Q&A. Or watch the
+[narrated video walkthrough](docs/video/project-walkthrough.mp4) of every page.
+
 ![Overview page of the dashboard](docs/screenshots/overview.png)
 
 ## Contents
