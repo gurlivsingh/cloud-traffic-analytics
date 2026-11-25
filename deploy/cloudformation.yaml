@@ -1,0 +1,274 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >-
+  Cloud-Based Traffic Data Analytics and Congestion Prediction (UCS531).
+  EC2 web/analytics server, S3 data bucket, RDS PostgreSQL, IAM instance profile,
+  CloudWatch logs/alarms/dashboard and SNS alerts. Deploy with: python deploy/aws.py up
+
+Parameters:
+  InstanceProfileName:
+    Type: String
+    Default: LabInstanceProfile
+    Description: >-
+      Existing EC2 instance profile. AWS Academy Learner Lab provides LabInstanceProfile.
+      Leave empty to create a least-privilege role instead (own AWS accounts).
+  AlertEmail:
+    Type: String
+    Default: ""
+    Description: Email for CloudWatch alarm notifications (optional; confirm the SNS email).
+  RepoUrl:
+    Type: String
+    Default: https://github.com/gurlivsingh/cloud-traffic-analytics.git
+  InstanceType:
+    Type: String
+    Default: t3.micro
+  DbInstanceClass:
+    Type: String
+    Default: db.t3.micro
+  LatestAmiId:
+    Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
+    Default: /aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64
+
+Conditions:
+  CreateRole: !Equals [!Ref InstanceProfileName, ""]
+  HasEmail: !Not [!Equals [!Ref AlertEmail, ""]]
+
+Resources:
+  # ---------------- Storage ----------------
+  DataBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault: {SSEAlgorithm: AES256}
+      Tags: [{Key: project, Value: traffic-analytics}]
+
+  # ---------------- Network ----------------
+  WebSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Traffic dashboard - HTTP from anywhere, no SSH
+      SecurityGroupIngress:
+        - {IpProtocol: tcp, FromPort: 80, ToPort: 80, CidrIp: 0.0.0.0/0, Description: HTTP}
+      Tags: [{Key: Name, Value: traffic-ec2-sg}]
+
+  DbSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Traffic database - PostgreSQL only from the web server security group
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 5432
+          ToPort: 5432
+          SourceSecurityGroupId: !GetAtt WebSecurityGroup.GroupId
+          Description: PostgreSQL from traffic-ec2-sg only
+      Tags: [{Key: Name, Value: traffic-rds-sg}]
+
+  # ---------------- Database ----------------
+  Database:
+    Type: AWS::RDS::DBInstance
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    Properties:
+      DBInstanceIdentifier: traffic-db
+      Engine: postgres
+      DBInstanceClass: !Ref DbInstanceClass
+      AllocatedStorage: "20"
+      StorageType: gp2
+      StorageEncrypted: true
+      DBName: traffic
+      MasterUsername: traffic_admin
+      MasterUserPassword: "{{resolve:ssm-secure:/traffic/db_password}}"
+      PubliclyAccessible: false
+      MultiAZ: false
+      BackupRetentionPeriod: 1
+      DeletionProtection: false
+      VPCSecurityGroups: [!GetAtt DbSecurityGroup.GroupId]
+      Tags: [{Key: project, Value: traffic-analytics}]
+
+  # ---------------- Identity (only when not using the Learner Lab profile) ----------------
+  WebRole:
+    Type: AWS::IAM::Role
+    Condition: CreateRole
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - {Effect: Allow, Principal: {Service: ec2.amazonaws.com}, Action: sts:AssumeRole}
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy
+        - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+      Policies:
+        - PolicyName: traffic-app-least-privilege
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - {Effect: Allow, Action: s3:ListBucket, Resource: !GetAtt DataBucket.Arn}
+              - {Effect: Allow, Action: [s3:GetObject, s3:PutObject], Resource: !Sub "${DataBucket.Arn}/*"}
+              - {Effect: Allow, Action: ssm:GetParameter, Resource: !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/traffic/*"}
+              - {Effect: Allow, Action: [cloudwatch:PutMetricData, cloudwatch:GetMetricData], Resource: "*"}
+
+  WebInstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Condition: CreateRole
+    Properties:
+      Roles: [!Ref WebRole]
+
+  # ---------------- Logs (7-day retention) ----------------
+  AppLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties: {LogGroupName: /traffic/app, RetentionInDays: 7}
+  AccessLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties: {LogGroupName: /traffic/access, RetentionInDays: 7}
+  PipelineLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties: {LogGroupName: /traffic/pipeline, RetentionInDays: 7}
+  NginxLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties: {LogGroupName: /traffic/nginx, RetentionInDays: 7}
+
+  # ---------------- Compute ----------------
+  WebServer:
+    Type: AWS::EC2::Instance
+    DependsOn: [AppLogGroup, AccessLogGroup, PipelineLogGroup, NginxLogGroup]
+    CreationPolicy:
+      ResourceSignal: {Count: 1, Timeout: PT40M}
+    Properties:
+      ImageId: !Ref LatestAmiId
+      InstanceType: !Ref InstanceType
+      IamInstanceProfile: !If [CreateRole, !Ref WebInstanceProfile, !Ref InstanceProfileName]
+      SecurityGroupIds: [!GetAtt WebSecurityGroup.GroupId]
+      MetadataOptions: {HttpTokens: required, HttpEndpoint: enabled}
+      BlockDeviceMappings:
+        - DeviceName: /dev/xvda
+          Ebs: {VolumeSize: 20, VolumeType: gp3, Encrypted: true, DeleteOnTermination: true}
+      Tags: [{Key: Name, Value: traffic-web}, {Key: project, Value: traffic-analytics}]
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          # First-boot bootstrap. Progress: /var/log/traffic-bootstrap.log
+          exec > >(tee -a /var/log/traffic-bootstrap.log) 2>&1
+          set -euxo pipefail
+          signal() { /opt/aws/bin/cfn-signal -e "$1" --stack ${AWS::StackName} --resource WebServer --region ${AWS::Region} || true; }
+          trap 'signal 1' ERR
+
+          dnf install -y git aws-cfn-bootstrap
+          git clone --depth 1 ${RepoUrl} /opt/traffic
+          cat > /opt/traffic/.env <<'ENV'
+          AWS_REGION=${AWS::Region}
+          S3_BUCKET=${DataBucket}
+          DB_HOST=${Database.Endpoint.Address}
+          DB_NAME=traffic
+          DB_USER=traffic_admin
+          RDS_INSTANCE_ID=${Database}
+          EC2_INSTANCE_ID=
+          DB_PASSWORD_PARAM=/traffic/db_password
+          ADMIN_PASSWORD_HASH_PARAM=/traffic/admin_password_hash
+          FLASK_SECRET_PARAM=/traffic/flask_secret
+          PIPELINE_LOG=/var/log/traffic/pipeline.log
+          ENV
+          cd /opt/traffic
+          bash deploy/setup_ec2.sh
+
+          # Load the dataset into S3 + RDS, train, predict
+          sudo -u ec2-user bash -c 'cd /opt/traffic && .venv/bin/python -m pipeline.prepare_data && .venv/bin/python -m pipeline.run_all' >> /var/log/traffic/pipeline.log 2>&1
+          curl -fsS http://127.0.0.1/health
+          signal 0
+
+  WebIp:
+    Type: AWS::EC2::EIP
+    Properties:
+      InstanceId: !Ref WebServer
+      Tags: [{Key: Name, Value: traffic-web-ip}]
+
+  # ---------------- Monitoring ----------------
+  AlertTopic:
+    Type: AWS::SNS::Topic
+    Properties: {TopicName: traffic-alerts}
+
+  AlertSubscription:
+    Type: AWS::SNS::Subscription
+    Condition: HasEmail
+    Properties: {TopicArn: !Ref AlertTopic, Protocol: email, Endpoint: !Ref AlertEmail}
+
+  CpuAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: traffic-ec2-cpu-high
+      AlarmDescription: EC2 CPU above 70% for 2 minutes
+      Namespace: CWAgent
+      MetricName: cpu_usage_active
+      Dimensions: [{Name: InstanceId, Value: !Ref WebServer}]
+      Statistic: Average
+      Period: 60
+      EvaluationPeriods: 2
+      Threshold: 70
+      ComparisonOperator: GreaterThanThreshold
+      TreatMissingData: notBreaching
+      AlarmActions: [!Ref AlertTopic]
+      OKActions: [!Ref AlertTopic]
+
+  StorageAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: traffic-rds-low-storage
+      AlarmDescription: RDS free storage below 2 GB
+      Namespace: AWS/RDS
+      MetricName: FreeStorageSpace
+      Dimensions: [{Name: DBInstanceIdentifier, Value: !Ref Database}]
+      Statistic: Minimum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 2000000000
+      ComparisonOperator: LessThanThreshold
+      AlarmActions: [!Ref AlertTopic]
+
+  PipelineAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: traffic-pipeline-failed
+      AlarmDescription: An ETL run failed (see the /traffic/pipeline log group)
+      Namespace: TrafficAnalytics
+      MetricName: PipelineFailures
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+      AlarmActions: [!Ref AlertTopic]
+
+  Dashboard:
+    Type: AWS::CloudWatch::Dashboard
+    Properties:
+      DashboardName: TrafficAnalytics
+      DashboardBody: !Sub |
+        {"widgets":[
+         {"type":"metric","x":0,"y":0,"width":12,"height":6,"properties":{"title":"EC2 CPU %","region":"${AWS::Region}","stat":"Average","period":60,
+          "metrics":[["CWAgent","cpu_usage_active","InstanceId","${WebServer}"],["AWS/EC2","CPUUtilization","InstanceId","${WebServer}"]]}},
+         {"type":"metric","x":12,"y":0,"width":12,"height":6,"properties":{"title":"EC2 memory and disk %","region":"${AWS::Region}","stat":"Average","period":60,
+          "metrics":[["CWAgent","mem_used_percent","InstanceId","${WebServer}"],["CWAgent","disk_used_percent","InstanceId","${WebServer}"]]}},
+         {"type":"metric","x":0,"y":6,"width":12,"height":6,"properties":{"title":"RDS CPU % and connections","region":"${AWS::Region}","stat":"Average","period":300,
+          "metrics":[["AWS/RDS","CPUUtilization","DBInstanceIdentifier","${Database}"],["AWS/RDS","DatabaseConnections","DBInstanceIdentifier","${Database}",{"yAxis":"right"}]]}},
+         {"type":"metric","x":12,"y":6,"width":12,"height":6,"properties":{"title":"Pipeline","region":"${AWS::Region}","stat":"Sum","period":300,
+          "metrics":[["TrafficAnalytics","RowsLoaded"],["TrafficAnalytics","PipelineDurationSec",{"stat":"Maximum","yAxis":"right"}],["TrafficAnalytics","PipelineFailures"]]}},
+         {"type":"alarm","x":0,"y":12,"width":24,"height":3,"properties":{"title":"Alarms","alarms":["${CpuAlarm.Arn}","${StorageAlarm.Arn}","${PipelineAlarm.Arn}"]}}
+        ]}
+
+Outputs:
+  WebsiteUrl:
+    Description: Public dashboard
+    Value: !Sub "http://${WebIp}"
+  DataBucketName:
+    Value: !Ref DataBucket
+  DatabaseEndpoint:
+    Value: !GetAtt Database.Endpoint.Address
+  InstanceId:
+    Value: !Ref WebServer
+  CloudWatchDashboard:
+    Value: !Sub "https://${AWS::Region}.console.aws.amazon.com/cloudwatch/home?region=${AWS::Region}#dashboards:name=TrafficAnalytics"
