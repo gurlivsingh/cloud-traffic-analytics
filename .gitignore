@@ -8,4 +8,7 @@ storage/
 pipeline.log
 *.joblib
 .claude/
+# LMS submission material (contains roll numbers) stays out of the public repo
+docs/report/
+submission/
 *.pdf

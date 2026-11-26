@@ -72,9 +72,9 @@ The course brief (15 marks) sets these rules. The full evidence-by-evidence tabl
 | 1 | Project proposal | ✔ Submitted (the PDF) |
 | 2 | System architecture diagram | ✔ In the README ([section 5](#5-architecture-how-the-pieces-fit) explains it) |
 | 3 | Working implementation | ✔ Verified end to end on the real dataset |
-| 4 | Cloud deployment with demonstration | ⏳ One-command deployment written and pushed; **not run on AWS yet** |
+| 4 | Cloud deployment with demonstration | ✔ Live on AWS (CloudFormation stack `traffic-analytics`, us-east-1, 26 Nov 2026); security checks passed |
 | 5 | Source code on GitHub with README | ✔ Public repository with README, docs and CI |
-| 6 | Report (max 5 pages) | ⏳ To do after deployment (needs AWS screenshots) |
+| 6 | Report (max 5 pages) | ✔ Written: 5 pages with screenshots from the live AWS deployment |
 | 7 | Final presentation and live demo | ⏳ To do; demo script in the README |
 
 **What our proposal promised, and where it is:**

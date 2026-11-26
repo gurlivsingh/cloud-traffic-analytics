@@ -176,7 +176,8 @@ Resources:
           bash deploy/setup_ec2.sh
 
           # Load the dataset into S3 + RDS, train, predict
-          sudo -u ec2-user bash -c 'cd /opt/traffic && .venv/bin/python -m pipeline.prepare_data && .venv/bin/python -m pipeline.run_all' >> /var/log/traffic/pipeline.log 2>&1
+          # redirect inside the ec2-user shell so the log stays writable for cron and the Admin page
+          sudo -u ec2-user bash -c 'cd /opt/traffic && (.venv/bin/python -m pipeline.prepare_data && .venv/bin/python -m pipeline.run_all) >> /var/log/traffic/pipeline.log 2>&1'
           curl -fsS http://127.0.0.1/health
           signal 0
 

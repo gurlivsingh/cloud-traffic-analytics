@@ -65,6 +65,8 @@ Processing and serving them from a single local machine limits scalability and a
 
 ## Architecture
 
+![System architecture diagram](docs/architecture/architecture.png)
+
 ```mermaid
 flowchart LR
   subgraph Users
@@ -223,9 +225,9 @@ with the evidence for each one.
 | Architecture diagram | ✔ [Above](#architecture) |
 | Working implementation | ✔ Verified locally on the real dataset |
 | Source code and README | ✔ This repository |
-| Cloud deployment and demonstration | ⏳ Scripts and guide ready; not yet run on AWS |
-| Report (≤ 5 pages) | ⏳ To do after deployment |
-| Presentation and live demo | ⏳ To do after deployment |
+| Cloud deployment and demonstration | ✔ Live on AWS via CloudFormation (us-east-1), security checks passed |
+| Report (≤ 5 pages) | ✔ Submitted on the LMS |
+| Presentation and live demo | ⏳ Lab evaluation, 1 Dec 2026 |
 
 ## Repository layout
 

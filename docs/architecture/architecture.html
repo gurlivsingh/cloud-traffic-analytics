@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>System architecture</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&display=swap" rel="stylesheet">
+<style>
+  @page { size: 1600px 1140px; margin: 0; }
+  :root { --canvas:#f0eee6; --card:#faf9f5; --feature:#f5e3c7; --panel:#e3dacc; --ink:#141413; --ls:#87867f; --ld:#3d3d3a; --line:#cccbc8; }
+  * { box-sizing: border-box; }
+  html, body { margin:0; width:1600px; height:1140px; background:var(--canvas); color:var(--ink); font-family:Inter, 'Segoe UI', Arial, sans-serif; }
+  .abs { position:absolute; }
+  .title { left:40px; top:26px; font:700 30px/1.1 Inter, sans-serif; letter-spacing:-.01em; }
+  .sub { left:40px; top:64px; font:400 17px 'Source Serif 4', Georgia, serif; color:var(--ld); }
+  .zone { border:2px dashed var(--ls); border-radius:22px; }
+  .zone > .lbl { position:absolute; top:-13px; left:20px; background:var(--canvas); padding:0 10px; font:700 13px Inter; letter-spacing:.1em; text-transform:uppercase; color:var(--ld); }
+  .vpc { border:1.5px solid var(--ls); border-radius:18px; }
+  .vpc > .lbl { position:absolute; top:-11px; left:18px; background:var(--canvas); padding:0 8px; font:600 12px Inter; letter-spacing:.1em; text-transform:uppercase; color:var(--ls); }
+  .box { background:var(--card); border-radius:16px; padding:14px 16px; font:400 14px/1.45 'Source Serif 4', Georgia, serif; }
+  .box b { display:block; font:700 16px/1.25 Inter, sans-serif; margin-bottom:5px; }
+  .box .tag { display:inline-block; font:600 11px Inter; letter-spacing:.08em; text-transform:uppercase; color:var(--ld); margin-bottom:4px; }
+  .box.ec2 { background:var(--feature); }
+  .box.ext { background:var(--panel); }
+  .sg { font:600 11.5px Inter; color:var(--ld); background:var(--canvas); border:1px solid var(--ls); border-radius:8px; padding:3px 8px; }
+  svg { position:absolute; left:0; top:0; }
+  .n { font:700 13px Inter; fill:var(--card); }
+  .al { font:500 12.5px Inter; fill:var(--ld); }
+  .legend { left:40px; top:1000px; width:1520px; display:grid; grid-template-columns:repeat(4, 1fr); gap:6px 28px; font:400 14px/1.4 'Source Serif 4', Georgia, serif; }
+  .legend span { display:inline-block; width:22px; height:22px; border-radius:50%; background:var(--ink); color:var(--card); font:700 12px/22px Inter; text-align:center; margin-right:8px; }
+</style>
+</head>
+<body>
+<div class="abs title">System architecture: Cloud-Based Traffic Data Analytics and Congestion Prediction</div>
+<div class="abs sub">UCS531 Cloud Computing · Gurliv Singh · Harshpreet Singh · Advisor: Ishani Rana · deployed on AWS (us-east-1) with CloudFormation</div>
+
+<!-- outside AWS -->
+<div class="abs box ext" style="left:40px;top:190px;width:220px;height:130px"><span class="tag">Users</span><b>Web browser</b>Dashboard viewers (7 pages) and the admin (CSV upload, run pipeline)</div>
+<div class="abs box ext" style="left:40px;top:470px;width:220px;height:120px"><span class="tag">Public data</span><b>UCI dataset</b>Metro Interstate Traffic Volume, hourly 2012–2018 (CC BY 4.0)</div>
+<div class="abs box ext" style="left:40px;top:690px;width:220px;height:130px"><span class="tag">Source code</span><b>GitHub repository</b>Code + README; GitHub Actions runs 14 tests on each push</div>
+
+<!-- AWS cloud -->
+<div class="abs zone" style="left:310px;top:120px;width:1250px;height:850px"><div class="lbl">AWS Cloud · region us-east-1</div></div>
+<div class="abs vpc" style="left:340px;top:160px;width:720px;height:560px"><div class="lbl">Default VPC</div></div>
+
+<div class="abs box ec2" style="left:370px;top:190px;width:380px;height:250px">
+  <span class="tag">Compute · IaaS</span><b>Amazon EC2 · t3.micro · Amazon Linux 2023</b>
+  nginx (port 80) → gunicorn → Flask web app + JSON API<br>
+  Data pipeline (cron): ETL → train → predict<br>
+  CloudWatch Agent · IMDSv2 · encrypted disk<br>
+  Elastic IP = fixed public address
+</div>
+<div class="abs sg" style="left:370px;top:447px">traffic-ec2-sg: inbound HTTP 80 only · no SSH</div>
+
+<div class="abs box" style="left:370px;top:530px;width:380px;height:150px">
+  <span class="tag">Database · PaaS</span><b>Amazon RDS · PostgreSQL · db.t3.micro</b>
+  locations · traffic_records · predictions · model_runs · pipeline_runs<br>Not publicly accessible · storage encrypted
+</div>
+<div class="abs sg" style="left:370px;top:687px">traffic-rds-sg: 5432 only from traffic-ec2-sg</div>
+
+<div class="abs box" style="left:1120px;top:160px;width:410px;height:120px"><span class="tag">Object storage</span><b>Amazon S3 bucket</b>raw/ · processed/ · models/ · feed/ — encrypted, all public access blocked</div>
+<div class="abs box" style="left:1120px;top:300px;width:410px;height:100px"><span class="tag">Secrets</span><b>SSM Parameter Store</b>DB password · admin password hash · Flask key (SecureString)</div>
+<div class="abs box" style="left:1120px;top:420px;width:410px;height:100px"><span class="tag">Identity</span><b>AWS IAM</b>Instance role (LabInstanceProfile) — no access keys on the server</div>
+<div class="abs box" style="left:1120px;top:550px;width:410px;height:130px"><span class="tag">Monitoring</span><b>Amazon CloudWatch</b>Agent metrics (CPU, memory, disk) · 4 log groups · pipeline metrics · 3 alarms · dashboard</div>
+<div class="abs box" style="left:1120px;top:740px;width:410px;height:90px"><span class="tag">Notifications</span><b>Amazon SNS</b>Topic traffic-alerts → email</div>
+
+<div class="abs box ext" style="left:340px;top:770px;width:720px;height:170px">
+  <span class="tag">Infrastructure as code</span><b>AWS CloudFormation · stack "traffic-analytics"</b>
+  One command (python deploy/aws.py up) creates every resource in this diagram: S3, security groups, RDS, EC2 + Elastic IP,
+  log groups, alarms, dashboard and SNS. On first boot the server installs itself from GitHub, loads the dataset into S3 and RDS,
+  trains the models and signals success. python deploy/aws.py down deletes everything.
+</div>
+
+<svg width="1600" height="1000" viewBox="0 0 1600 1000">
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#3d3d3a"/></marker>
+  </defs>
+  <g stroke="#3d3d3a" stroke-width="2" fill="none">
+    <path d="M260 250 H368" marker-end="url(#a)"/>                         <!-- 1 users -> ec2 -->
+    <path d="M260 530 H290 V330 H368" marker-end="url(#a)"/>               <!-- 2 uci -> ec2 -->
+    <path d="M750 215 H1118" marker-start="url(#a)" marker-end="url(#a)"/>  <!-- 3 ec2 <-> s3 -->
+    <path d="M700 440 V528" marker-end="url(#a)"/>                         <!-- 4 ec2 -> rds -->
+    <path d="M750 340 H1118" marker-end="url(#a)"/>                        <!-- 5 ec2 -> ssm -->
+    <path d="M750 410 H1118" stroke-dasharray="6 5" marker-start="url(#a)"/> <!-- 6 iam role -->
+    <path d="M750 600 H1118" marker-end="url(#a)"/>                        <!-- 7 rds -> cw -->
+    <path d="M735 440 V470 H1080 V630 H1118" marker-end="url(#a)"/>          <!-- 7 ec2 -> cw -->
+    <path d="M1325 680 V738" marker-end="url(#a)"/>                        <!-- 8 cw -> sns -->
+    <path d="M260 755 H275 V390 H368" marker-end="url(#a)"/>               <!-- 9 github -> ec2 -->
+  </g>
+  <g>
+    <circle cx="314" cy="250" r="12" fill="#141413"/><text class="n" x="314" y="255" text-anchor="middle">1</text>
+    <text class="al" x="268" y="240">HTTP</text>
+    <circle cx="290" cy="440" r="12" fill="#141413"/><text class="n" x="290" y="445" text-anchor="middle">2</text>
+    <circle cx="1085" cy="215" r="12" fill="#141413"/><text class="n" x="1085" y="220" text-anchor="middle">3</text>
+    <text class="al" x="790" y="205">boto3: read / write files &amp; models</text>
+    <circle cx="700" cy="490" r="12" fill="#141413"/><text class="n" x="700" y="495" text-anchor="middle">4</text>
+    <text class="al" x="610" y="495">SQL :5432</text>
+    <circle cx="1085" cy="340" r="12" fill="#141413"/><text class="n" x="1085" y="345" text-anchor="middle">5</text>
+    <text class="al" x="790" y="330">GetParameter (decrypt)</text>
+    <circle cx="1085" cy="410" r="12" fill="#141413"/><text class="n" x="1085" y="415" text-anchor="middle">6</text>
+    <text class="al" x="790" y="400">assumes role (temporary creds)</text>
+    <circle cx="1080" cy="545" r="12" fill="#141413"/><text class="n" x="1080" y="550" text-anchor="middle">7</text>
+    <text class="al" x="830" y="590">RDS metrics</text>
+    <text class="al" x="830" y="462">agent metrics, logs, custom metrics</text>
+    <circle cx="1325" cy="709" r="12" fill="#141413"/><text class="n" x="1325" y="714" text-anchor="middle">8</text>
+    <text class="al" x="1345" y="714">alarm</text>
+    <circle cx="275" cy="640" r="12" fill="#141413"/><text class="n" x="275" y="645" text-anchor="middle">9</text>
+  </g>
+</svg>
+
+<div class="abs legend">
+  <div><span>1</span>Users open the dashboard (HTTP, Elastic IP)</div>
+  <div><span>2</span>Pipeline downloads the public dataset</div>
+  <div><span>3</span>Raw/processed data and models stored in S3</div>
+  <div><span>4</span>Records and forecasts stored in RDS</div>
+  <div><span>5</span>Secrets read from SSM, never stored in code</div>
+  <div><span>6</span>Server identity via IAM role (least privilege)</div>
+  <div><span>7</span>Metrics and logs sent to CloudWatch</div>
+  <div><span>8</span>Alarms notify the team through SNS</div>
+  <div><span>9</span>Server installs the app from GitHub on boot</div>
+</div>
+</body>
+</html>

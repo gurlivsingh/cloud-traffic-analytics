@@ -18,7 +18,7 @@ _Last updated: 25 Nov 2026._
 |---|---|---|---|---|
 | T1 | Group of at most 3 students from the same lab group | Proposal | **Met** | 2 members, both in lab L430 |
 | T2 | A simple, well-implemented solution preferred over an ambitious, incomplete one | Whole repo | **Met** | Core features complete; 14 automated tests pass (`pytest -q`) |
-| T3 | Cloud is integral to development, deployment, storage, computation or service delivery | `cloud.py`, `db.py`, `deploy/` | **Built** | Storage = S3, database = RDS, compute + web = EC2. Needs the AWS deployment (D4) to be demonstrated |
+| T3 | Cloud is integral to development, deployment, storage, computation or service delivery | `cloud.py`, `db.py`, `deploy/` | **Met** | Live on AWS: storage = S3, database = RDS, compute + web = EC2 (stack `traffic-analytics`, 26 Nov 2026) |
 | T4 | Uses a free tier or student credits | README → *Cost and teardown* | **Built** | t3.micro, db.t3.micro, 20 GB; re-check free-tier terms at sign-up |
 | T5 | Evaluated on implementation, cloud use, documentation and presentation | D1–D7 below | See below | |
 
@@ -29,10 +29,10 @@ _Last updated: 25 Nov 2026._
 | D1 | Project proposal (problem statement, objectives) | Proposal PDF (submitted) | **Met** | Submitted. Keep the PDF out of the public repo: it contains phone numbers |
 | D2 | System architecture diagram | README → *Architecture* (Mermaid) | **Met** | Renders on GitHub. The proposal's diagram does not show IAM, security groups, SSM or SNS; use the README version in the report |
 | D3 | Working implementation | `pipeline/`, `app/` | **Met** (locally) | End to end on real data: 91,797 rows loaded, model trained, 378 forecasts written, dashboard verified in a browser |
-| D4 | Cloud deployment with demonstration | `deploy/`, README → *Deploy on AWS* | **Pending** | Scripts and guide are ready but have **not been run on AWS yet**. Steps 0–9 of the README |
+| D4 | Cloud deployment with demonstration | `deploy/cloudformation.yaml`, `deploy/aws.py` | **Met** | CloudFormation stack `traffic-analytics` reached CREATE_COMPLETE (15 resources, us-east-1) on 26 Nov 2026. Live dashboard served from EC2; `/health` reports RDS and S3. Security checks passed: RDS port 5432 unreachable from the internet, no SSH port, S3 object URL returns 403, `/admin` redirects to login |
 | D5 | Source code on GitHub with a README | This repository | **Met** | README, CI workflow running the tests on every push |
-| D6 | Project report (max 5 pages) | — | **Pending** | Outline in the project plan; needs AWS screenshots from D4 |
-| D7 | Final presentation and live demonstration | README → *Demo script* | **Pending** | Demo script written; slides not made; rehearsal needs D4 |
+| D6 | Project report (max 5 pages) | Submitted on the LMS (kept out of this public repo: contains roll numbers) | **Met** | 5 pages, with screenshots from the live AWS deployment |
+| D7 | Final presentation and live demonstration | README → *Demo script* | **Pending** | Live demo at the lab evaluation (1 Dec 2026); the deployment is ready |
 
 ## 2. Proposal commitments [P]
 
@@ -43,20 +43,20 @@ _Last updated: 25 Nov 2026._
 | P3 | Identify congestion levels | `pipeline/congestion.py` | **Met** | V/C ratio with 4 levels; boundaries tested in `tests/test_congestion.py` |
 | P4 | Predict near-future traffic from historical patterns | `pipeline/train.py`, `pipeline/predict.py` | **Met** | 1-hour model, extended to 6 hours recursively |
 | P5 | Public or synthetic datasets only | `pipeline/prepare_data.py` | **Met** | UCI dataset (CC BY 4.0) plus segments labelled "(synthetic)" everywhere |
-| P6 | Amazon EC2 for compute | `deploy/setup_ec2.sh`, `deploy/traffic-app.service` | **Built** | Pending D4 |
+| P6 | Amazon EC2 for compute | `deploy/setup_ec2.sh`, `deploy/traffic-app.service` | **Met** | Running on AWS (t3.micro, Amazon Linux 2023) |
 | P7 | Amazon S3 for datasets and processed files | `cloud.py` | **Built** | Prefixes `raw/`, `processed/`, `models/`, `feed/` |
 | P8 | Amazon RDS for structured records | `db.py` | **Built** | PostgreSQL on RDS (SQLite only in local development mode) |
-| P9 | IAM access control | `deploy/iam-ec2-policy.json`, README step 5 | **Built** | Least-privilege instance role; no access keys on the server. Pending D4 |
-| P10 | CloudWatch monitoring | `deploy/cloudwatch-agent.json`, `deploy/create_monitoring.sh`, `cloud.py` | **Built** | Agent metrics, app logs, custom pipeline metrics, 3 alarms, dashboard. Pending D4 |
+| P9 | IAM access control | `deploy/iam-ec2-policy.json`, README step 5 | **Met** | Server uses the lab instance profile (IAM role); no access keys on the server |
+| P10 | CloudWatch monitoring | `deploy/cloudwatch-agent.json`, `deploy/create_monitoring.sh`, `cloud.py` | **Met** | Live: agent and RDS metrics on the System page, 4 log groups, 3 alarms, CloudWatch dashboard |
 | P11 | Python backend and data-processing modules | `pipeline/`, `app/` | **Met** | |
 | P12 | Preprocess the traffic data | `pipeline/etl.py` (`normalize`, `clean`) | **Met** | Cleaning rules tested in `tests/test_features.py::test_uci_format_cleaning` |
 | P13 | Compute congestion from traffic indicators | `pipeline/congestion.py` | **Met** | Uses volume; speed and occupancy are stored and shown where available (see deviation 3) |
 | P14 | Lightweight ML model: Linear Regression or Random Forest | `pipeline/train.py` | **Met** | Both trained and compared, plus a naive baseline (table below) |
-| P15 | Web dashboard: current and historical congestion, predictions, basic system metrics | `app/` | **Met** (locally) | Overview, Historical, Prediction, Model and System pages. System metrics need D4 to show CloudWatch data |
+| P15 | Web dashboard: current and historical congestion, predictions, basic system metrics | `app/` | **Met** | All pages live on AWS; the System page shows CloudWatch metrics |
 | P16 | Interactive charts and maps | `app/templates/` | **Met** | Chart.js hover tooltips; Leaflet map with popups |
 | P17 | Features: vehicle count, speed, road occupancy, timestamp, location | `db.py` schema | **Met with deviation** | All five are stored. In the real data, speed and occupancy are missing (see deviation 3) |
 | P18 | Raw datasets stored as CSV/Parquet | `cloud.py`, `pipeline/etl.py` | **Met** | Gzipped CSV |
-| P19 | Demonstrate security, monitoring and scalability | README → *Security checks*, *Load test*, *Scaling* | **Built / Pending** | Security and monitoring are built. Scalability: the app tier is stateless; the load test and the optional Auto Scaling Group need D4 |
+| P19 | Demonstrate security, monitoring and scalability | README → *Security checks*, *Load test*, *Scaling* | **Met / Pending** | Security and monitoring verified live. Scalability: the app tier is stateless; the load test and the optional Auto Scaling Group are not yet run |
 
 ## 3. Model evaluation evidence (local run)
 
@@ -87,7 +87,7 @@ These are numbers from one run on a laptop. The AWS run trains on the same data,
 ## 5. What is not yet evidenced
 
 Nothing below may be presented as done until it has actually run:
-- Deployment on AWS (D4) and every check in the README's *Security checks* table
-- CloudWatch metrics, alarms and the SNS email
+- The SNS alarm email (no address subscribed yet)
+- A CloudWatch alarm actually firing (needs the load test)
 - The load test, and any scaling claim beyond "the app tier is stateless"
-- Report (D6) and slides (D7)
+- Slides and the live demonstration (D7)
