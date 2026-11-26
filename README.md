@@ -84,7 +84,8 @@ flowchart LR
     CW[CloudWatch<br/>metrics · logs · dashboard · alarms]
     SNS[SNS email alerts]
   end
-  B -->|HTTP :80| EC2
+  B -->|HTTPS| CF[CloudFront CDN<br/>free TLS certificate]
+  CF -->|HTTP :80| EC2
   ADM -->|upload| EC2
   EC2 <-->|boto3| S3
   EC2 -->|SQL :5432, security group to security group only| RDS
@@ -113,6 +114,7 @@ Cron runs steps 2 and 4 every hour, and steps 2–4 every night. A lock file pre
 | Security groups | Port 80 open to the web; RDS reachable **only** from the EC2 security group | Network isolation |
 | SSM Parameter Store | Encrypted secrets (SecureString) | Secrets management |
 | CloudWatch + SNS | Agent metrics, logs, custom pipeline metrics, dashboard, alarms, email alerts | Monitoring, observability |
+| CloudFront | HTTPS front door (free AWS certificate) in front of EC2, so every browser opens the dashboard | Content delivery network (CDN), TLS |
 
 ## Data and methodology
 

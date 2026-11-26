@@ -31,6 +31,7 @@ Parameters:
 Conditions:
   CreateRole: !Equals [!Ref InstanceProfileName, ""]
   HasEmail: !Not [!Equals [!Ref AlertEmail, ""]]
+  IsUsEast1: !Equals [!Ref "AWS::Region", us-east-1]
 
 Resources:
   # ---------------- Storage ----------------
@@ -187,6 +188,37 @@ Resources:
       InstanceId: !Ref WebServer
       Tags: [{Key: Name, Value: traffic-web-ip}]
 
+  # ---------------- HTTPS front door (CDN) ----------------
+  # Free AWS certificate on *.cloudfront.net; browsers that force HTTPS can open the dashboard.
+  Cdn:
+    Type: AWS::CloudFront::Distribution
+    Properties:
+      DistributionConfig:
+        Enabled: true
+        Comment: HTTPS front door for the traffic dashboard
+        PriceClass: PriceClass_100
+        HttpVersion: http2
+        Origins:
+          - Id: web
+            # CloudFront needs a host name, not an IP: the Elastic IP's public DNS name
+            DomainName: !Join
+              - ""
+              - - "ec2-"
+                - !Join ["-", !Split [".", !Ref WebIp]]
+                - !If [IsUsEast1, ".compute-1.amazonaws.com", !Sub ".${AWS::Region}.compute.amazonaws.com"]
+            CustomOriginConfig:
+              OriginProtocolPolicy: http-only
+              HTTPPort: 80
+              OriginReadTimeout: 60
+        DefaultCacheBehavior:
+          TargetOriginId: web
+          ViewerProtocolPolicy: redirect-to-https
+          AllowedMethods: [GET, HEAD, OPTIONS, PUT, PATCH, POST, DELETE]
+          CachedMethods: [GET, HEAD]
+          Compress: true
+          CachePolicyId: 4135ea2d-6df8-44a3-9df3-4b5a84be39ad          # managed: CachingDisabled (live data)
+          OriginRequestPolicyId: b689b0a8-53d0-40ab-baf2-68738e2966ac  # managed: AllViewerExceptHostHeader (cookies, query, forms)
+
   # ---------------- Monitoring ----------------
   AlertTopic:
     Type: AWS::SNS::Topic
@@ -262,8 +294,11 @@ Resources:
         ]}
 
 Outputs:
+  SecureWebsiteUrl:
+    Description: Public dashboard over HTTPS (share this one)
+    Value: !Sub "https://${Cdn.DomainName}"
   WebsiteUrl:
-    Description: Public dashboard
+    Description: Public dashboard, plain HTTP straight to EC2
     Value: !Sub "http://${WebIp}"
   DataBucketName:
     Value: !Ref DataBucket

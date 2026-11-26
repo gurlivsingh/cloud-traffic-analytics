@@ -179,6 +179,7 @@ In the Learner Lab this comes from free credits, not from you.
 | **SSM Parameter Store** | Secure configuration storage | Encrypted (SecureString) database password, admin password and its hash, Flask session key | Keeps secrets out of code, Git and config files. Free, unlike Secrets Manager |
 | **Amazon CloudWatch** | Monitoring | Agent metrics (CPU, memory, disk), 4 log groups, custom metrics from our pipeline, 3 alarms, 1 dashboard | Built in; no extra servers |
 | **Amazon SNS** | Notifications | Alarms publish to the `traffic-alerts` topic, which emails subscribers | The standard way for CloudWatch alarms to alert people |
+| **Amazon CloudFront** | Content delivery network (CDN) | Gives the dashboard an `https://…cloudfront.net` address with a free AWS certificate and forwards requests to EC2 (no caching, because the data is live) | Many browsers (e.g. Brave) refuse plain-HTTP sites. A custom domain + certificate on EC2 would need a paid domain |
 | **AWS CloudFormation** | Infrastructure as code | `deploy/cloudformation.yaml` defines every resource; `python deploy/aws.py up` creates them all | Repeatable, reviewable, one-command deploy and one-command delete |
 
 ---

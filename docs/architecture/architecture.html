@@ -47,7 +47,7 @@
   nginx (port 80) → gunicorn → Flask web app + JSON API<br>
   Data pipeline (cron): ETL → train → predict<br>
   CloudWatch Agent · IMDSv2 · encrypted disk<br>
-  Elastic IP = fixed public address
+  Elastic IP = fixed address · CloudFront = HTTPS front door
 </div>
 <div class="abs sg" style="left:370px;top:447px">traffic-ec2-sg: inbound HTTP 80 only · no SSH</div>
 
@@ -65,7 +65,7 @@
 
 <div class="abs box ext" style="left:340px;top:770px;width:720px;height:170px">
   <span class="tag">Infrastructure as code</span><b>AWS CloudFormation · stack "traffic-analytics"</b>
-  One command (python deploy/aws.py up) creates every resource in this diagram: S3, security groups, RDS, EC2 + Elastic IP,
+  One command (python deploy/aws.py up) creates every resource in this diagram: S3, security groups, RDS, EC2 + Elastic IP, CloudFront,
   log groups, alarms, dashboard and SNS. On first boot the server installs itself from GitHub, loads the dataset into S3 and RDS,
   trains the models and signals success. python deploy/aws.py down deletes everything.
 </div>
@@ -88,7 +88,7 @@
   </g>
   <g>
     <circle cx="314" cy="250" r="12" fill="#141413"/><text class="n" x="314" y="255" text-anchor="middle">1</text>
-    <text class="al" x="268" y="240">HTTP</text>
+    <text class="al" x="263" y="240">HTTPS</text>
     <circle cx="290" cy="440" r="12" fill="#141413"/><text class="n" x="290" y="445" text-anchor="middle">2</text>
     <circle cx="1085" cy="215" r="12" fill="#141413"/><text class="n" x="1085" y="220" text-anchor="middle">3</text>
     <text class="al" x="790" y="205">boto3: read / write files &amp; models</text>
@@ -108,7 +108,7 @@
 </svg>
 
 <div class="abs legend">
-  <div><span>1</span>Users open the dashboard (HTTP, Elastic IP)</div>
+  <div><span>1</span>Users open the dashboard over HTTPS (CloudFront CDN → Elastic IP)</div>
   <div><span>2</span>Pipeline downloads the public dataset</div>
   <div><span>3</span>Raw/processed data and models stored in S3</div>
   <div><span>4</span>Records and forecasts stored in RDS</div>
